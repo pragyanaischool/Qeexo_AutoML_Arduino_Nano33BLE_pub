@@ -1,0 +1,183 @@
+/*
+  Qeexo AutoML Demo
+
+  This example creates a Qeexo AutoML predict demo with two threads that shows how
+  to use static library in user application that runs on Arduino Nano 33 BLE
+
+
+  This example code is in the public domain.
+*/
+
+// ============================================
+//  Qeexo nano 33 board test program
+//    battery level: A5
+//    SW1: A7 (top)
+//    SW2: A6 (bottom)
+//    RGB: D13 RGB1(bottom) RGB2(top)
+//  https://github.com/adafruit/Adafruit_NeoPixel RGB LED library
+// ============================================
+//  [ nano 33 ]|[battery board]
+//             | power SW[off-on]
+//             |    charge LED
+//             |    SW1(A7)   (Disable classify button)
+//             |    RGB2(D13) (Show classify work state)
+//             |    SW2(A6)   (Enable classify button)
+//             |    RGB1(D13) (Show classify result)
+//   led1 led2 |    battery con
+// ============================================
+#include <ArduinoBLE.h>
+#include <Adafruit_NeoPixel.h>                         // RGB LED 
+#include "QxAutoMLInf.h"
+#include "utility/ATT.h"
+
+uint16_t          LSM6DSMFifoCount      = 0;
+uint16_t          QxMlLatency           = 0;
+uint32_t          QxMlUpdateTime        = 0;
+uint8_t           QxClassificationResult= 0;
+static long itime1, itime2; 
+static bool classify_is_on = false;
+
+QxAutoMLInf  QxAutoMLInf(NULL, NULL);  
+Adafruit_NeoPixel pixels(2, 13, NEO_GRB + NEO_KHZ800); // 2 NeoPixel @pinD13
+
+typedef enum {
+  StatusIdle,
+  StatusOngoing,
+  StatusFinished
+} ConnectStatus;
+  
+#define BLE_CONNECT_WAIT_COUNT 25 
+void get_classify_enabled(){
+    if(millis() - itime1 > 300) {
+        itime1 = millis(); dump(); // 300ms loop analog port check
+        if(analogRead(A7) < 100 && analogRead(A6) > 900) {
+            pixels.setPixelColor(1, pixels.Color(80,  0,  0)); 
+            classify_is_on = true;
+        } // ON 
+        if(analogRead(A6) < 100 && analogRead(A7) > 900) {
+            pixels.setPixelColor(1, pixels.Color( 0,  0, 80));
+            classify_is_on = false;
+        } // OFF
+        pixels.show();
+    }
+}
+void wait_connected()
+{
+    ConnectStatus connected = StatusIdle;
+    int count =0;
+
+    QxBTHal_Initialize();
+
+    while(!Serial){
+        // poll for BLE events
+
+        QxOS_DebugPrint("usb not connected, processing BLE.");
+
+        BLE.poll();
+
+        if (ATT.connected()) {
+            if (StatusIdle == connected) {
+                connected = StatusOngoing;
+            } 
+        }
+
+        if (StatusIdle == connected) {
+            delay(100);
+            count = 0;
+        } else if (StatusOngoing == connected) {
+            delay(100);
+            Serial.println(count++);
+            if (BLE_CONNECT_WAIT_COUNT == count) {
+                connected = StatusFinished;
+                BLE.stopAdvertise();
+                QxOS_DebugPrint("BT connected, stopAdvertise.");
+                break;
+            }
+        }
+
+        get_classify_enabled();
+        if (classify_is_on) {
+            break;
+        }
+    }
+
+    if (StatusFinished == connected) {
+        QxOS_DebugPrint("connected: %d", connected);
+    }
+}
+
+void ledtest() {
+  for(int n = 0; n < 2; n++ ) {  
+    pixels.setPixelColor(0, pixels.Color(20, 20, 20)); pixels.setPixelColor(1, pixels.Color( 0,  0,  0)); pixels.show(); delay(500);  
+    pixels.setPixelColor(0, pixels.Color( 0,  0,  0)); pixels.setPixelColor(1, pixels.Color(20, 20, 20)); pixels.show(); delay(500); 
+    pixels.setPixelColor(0, pixels.Color(80,  0,  0)); pixels.setPixelColor(1, pixels.Color( 0,  0,  0)); pixels.show(); delay(500);  
+    pixels.setPixelColor(0, pixels.Color( 0,  0,  0)); pixels.setPixelColor(1, pixels.Color(80,  0,  0)); pixels.show(); delay(500); 
+    pixels.setPixelColor(0, pixels.Color( 0, 80,  0)); pixels.setPixelColor(1, pixels.Color( 0,  0,  0)); pixels.show(); delay(500);  
+    pixels.setPixelColor(0, pixels.Color( 0,  0,  0)); pixels.setPixelColor(1, pixels.Color( 0, 80,  0)); pixels.show(); delay(500);
+    pixels.setPixelColor(0, pixels.Color( 0,  0, 80)); pixels.setPixelColor(1, pixels.Color( 0,  0,  0)); pixels.show(); delay(500);  
+    pixels.setPixelColor(0, pixels.Color( 0,  0,  0)); pixels.setPixelColor(1, pixels.Color( 0,  0, 80)); pixels.show(); delay(500);  
+  } pixels.setPixelColor(0, pixels.Color(20, 20,  0)); pixels.setPixelColor(1, pixels.Color(20, 20,  0)); pixels.show();
+}
+
+void setup() {
+
+    ledtest();
+    if (classify_is_on == false) {
+        pixels.setPixelColor(1, pixels.Color( 0, 0, 80));
+    } else {
+        pixels.setPixelColor(1, pixels.Color( 80, 0, 0));
+    }
+    pixels.show();
+
+    /* Wait untill the USB debug port is opened */
+    wait_connected();
+
+    osThreadSetPriority(osThreadGetId(),osPriorityRealtime7);
+
+    /* Call this function to init all necessary preparations for clasification  */
+    QxAutoMLInf.InitEngine();
+}
+
+void dump() {
+      float vol = analogRead(A5) *3.3/1024;
+      Serial.print("A5: ");      Serial.print(vol*2);          // Battery Voltage[Volt]
+      Serial.print("[V]  A6: "); Serial.print(analogRead(A6)); // SW2 0:L(ON) 1024:H(OFF)
+      Serial.print("  A7: ");  Serial.println(analogRead(A7)); // SW1 0:L(ON) 1024:H(OFF)  
+}
+
+void loop() {
+
+    get_classify_enabled();
+
+    /* Get classification calling interval(ms) from library */
+    int interval = QxAutoMLInf.GetInterval();
+    
+    if (classify_is_on) {
+        /* Get current tick in ms */
+        uint32_t tick = QxOS_GetTick();
+
+        /* Call classify periodically */
+        QxClassificationResult = (uint8_t)QxAutoMLInf.Classify();
+        
+        QxMlLatency = (uint16_t)QxOS_GetTick() - tick;
+        QxOS_DebugPrint("Result: %d, lantency: %d, interval: %d",
+            QxClassificationResult, QxMlLatency, QxAutoMLInf.GetInterval());
+        if (QxClassificationResult) {
+            QxOS_DebugPrint("set led off");
+            QxOS_ClassifyBTPrint("1");
+            pixels.setPixelColor(0, pixels.Color(0, 80,  0));
+        } else {
+            QxOS_DebugPrint("set led on");
+            pixels.setPixelColor(0, pixels.Color(20, 20,  20));
+            QxOS_ClassifyBTPrint("2");
+        }
+        pixels.show();
+    } else {
+        QxMlLatency = 0;
+    }
+    
+    if(QxMlLatency < interval) {
+        QxOS_Delay(interval - QxMlLatency);
+    }
+}
+

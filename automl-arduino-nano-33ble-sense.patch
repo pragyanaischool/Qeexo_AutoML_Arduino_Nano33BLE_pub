@@ -1,0 +1,294 @@
+From 8583157a69c5a3417cf2ad4e1a56ac6897717f83 Mon Sep 17 00:00:00 2001
+From: "leo.mo" <leo.mo@qeexo.com>
+Date: Sun, 1 Nov 2020 23:55:04 -0500
+Subject: [PATCH] modifications for automl arduino nano 33ble demo
+
+---
+ .../COMPONENT_FLASHIAP/FlashIAPBlockDevice.h  |  2 +-
+ drivers/AnalogIn.h                            |  7 ++++
+ drivers/source/AnalogIn.cpp                   |  7 ++++
+ drivers/source/usb/USBDevice.cpp              | 18 +++++-----
+ .../targets/TARGET_CORDIO/mbed_lib.json       |  2 +-
+ hal/analogin_api.h                            | 13 +++++++
+ main.cpp                                      |  2 ++
+ .../TARGET_NRF5x/TARGET_NRF52/analogin_api.c  | 34 +++++++++++++++++++
+ .../TARGET_NRF5x/TARGET_NRF52/objects.h       | 14 ++++++++
+ tools/profiles/develop.json                   |  2 +-
+ tools/profiles/release.json                   |  2 +-
+ tools/resources/__init__.py                   |  6 ++++
+ tools/toolchains/gcc.py                       |  2 +-
+ 13 files changed, 98 insertions(+), 13 deletions(-)
+ create mode 100644 main.cpp
+
+diff --git a/components/storage/blockdevice/COMPONENT_FLASHIAP/FlashIAPBlockDevice.h b/components/storage/blockdevice/COMPONENT_FLASHIAP/FlashIAPBlockDevice.h
+index 98cd805612..ec64c50616 100644
+--- a/components/storage/blockdevice/COMPONENT_FLASHIAP/FlashIAPBlockDevice.h
++++ b/components/storage/blockdevice/COMPONENT_FLASHIAP/FlashIAPBlockDevice.h
+@@ -133,7 +133,7 @@ public:
+     *  @param size     Size to erase in bytes
+     *  @return         True if erase is valid for underlying block device
+     */
+-    virtual bool is_valid_erase(bd_addr_t addr, bd_size_t size) const;
++    virtual bool is_valid_erase(mbed::bd_addr_t addr, mbed::bd_size_t size) const;
+ 
+ 
+ private:
+diff --git a/drivers/AnalogIn.h b/drivers/AnalogIn.h
+index 9ff9ec7ee3..5affdfb9da 100644
+--- a/drivers/AnalogIn.h
++++ b/drivers/AnalogIn.h
+@@ -80,6 +80,13 @@ public:
+      */
+     AnalogIn(PinName pin);
+ 
++
++    /** Reconfigure the adc object using the given configuration
++     *
++     * @param config reference to structure which holds AnalogIn configuration
++     */
++    void configure(const analogin_config_t &config);
++
+     /** Read the input voltage, represented as a float in the range [0.0, 1.0]
+      *
+      * @returns A floating-point value representing the current input voltage, measured as a percentage
+diff --git a/drivers/source/AnalogIn.cpp b/drivers/source/AnalogIn.cpp
+index 63d910c227..cc52eef484 100644
+--- a/drivers/source/AnalogIn.cpp
++++ b/drivers/source/AnalogIn.cpp
+@@ -38,6 +38,13 @@ AnalogIn::AnalogIn(const PinMap &pinmap)
+ }
+ 
+ 
++void AnalogIn::configure(const analogin_config_t &config)
++{
++    lock();
++    analogin_configure(&_adc, &config);
++    unlock();
++}
++
+ float AnalogIn::read()
+ {
+     lock();
+diff --git a/drivers/source/usb/USBDevice.cpp b/drivers/source/usb/USBDevice.cpp
+index 40c3b0df93..9788089a0c 100644
+--- a/drivers/source/usb/USBDevice.cpp
++++ b/drivers/source/usb/USBDevice.cpp
+@@ -980,10 +980,11 @@ void USBDevice::out(usb_ep_t endpoint)
+ 
+     endpoint_info_t *info = &_endpoint_info[EP_TO_INDEX(endpoint)];
+ 
+-    MBED_ASSERT(info->pending >= 1);
+-    info->pending -= 1;
+-    if (info->callback) {
+-        info->callback();
++    if (info->pending >= 1) {
++        info->pending -= 1;
++        if (info->callback) {
++          info->callback();
++        }
+     }
+ }
+ 
+@@ -1007,10 +1008,11 @@ void USBDevice::in(usb_ep_t endpoint)
+ 
+     endpoint_info_t *info = &_endpoint_info[EP_TO_INDEX(endpoint)];
+ 
+-    MBED_ASSERT(info->pending >= 1);
+-    info->pending -= 1;
+-    if (info->callback) {
+-        info->callback();
++    if (info->pending >= 1) {
++        info->pending -= 1;
++        if (info->callback) {
++          info->callback();
++        }
+     }
+ }
+ 
+diff --git a/features/FEATURE_BLE/targets/TARGET_CORDIO/mbed_lib.json b/features/FEATURE_BLE/targets/TARGET_CORDIO/mbed_lib.json
+index 165b63f15e..79e9036832 100644
+--- a/features/FEATURE_BLE/targets/TARGET_CORDIO/mbed_lib.json
++++ b/features/FEATURE_BLE/targets/TARGET_CORDIO/mbed_lib.json
+@@ -1,6 +1,6 @@
+ {
+     "name": "cordio",
+-    "macros": [ "WSF_MS_PER_TICK=1" ],
++    "macros": [ "WSF_MS_PER_TICK=10" ],
+     "config": {
+         "max-connections": {
+             "help": "Maximum number of connections",
+diff --git a/hal/analogin_api.h b/hal/analogin_api.h
+index d172607c69..07208443f5 100644
+--- a/hal/analogin_api.h
++++ b/hal/analogin_api.h
+@@ -33,6 +33,10 @@ extern "C" {
+  */
+ typedef struct analogin_s analogin_t;
+ 
++/** Analogin configuration hal structure. analogin_config_s is declared in the target's hal
++ */
++typedef struct analogin_config_s analogin_config_t;
++
+ /**
+  * \defgroup hal_analogin Analogin hal functions
+  *
+@@ -77,6 +81,15 @@ void analogin_init_direct(analogin_t *obj, const PinMap *pinmap);
+  */
+ void analogin_init(analogin_t *obj, PinName pin);
+ 
++/** Initialize the analogin peripheral
++ *
++ * Configures the pin used by analogin.
++ * @param obj The analogin object to initialize
++ * @param pin The analogin pin name
++ * @param pinmap pointer to structure which holds analogin configuration
++ */
++void __attribute__((weak)) analogin_configure(analogin_t *obj, const analogin_config_t *config);
++
+ /** Release the analogin peripheral
+  *
+  * Releases the pin used by analogin.
+diff --git a/main.cpp b/main.cpp
+new file mode 100644
+index 0000000000..dacdbf6de7
+--- /dev/null
++++ b/main.cpp
+@@ -0,0 +1,2 @@
++#include "mbed.h"
++int main() {}
+diff --git a/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/analogin_api.c b/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/analogin_api.c
+index e66be66f50..863c7b090d 100644
+--- a/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/analogin_api.c
++++ b/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/analogin_api.c
+@@ -122,6 +122,40 @@ void analogin_init(analogin_t *obj, PinName pin)
+     ANALOGIN_INIT_DIRECT(obj, &static_pinmap);
+ }
+ 
++/** Reconfigure the analogin peripheral
++ *
++ * Configures the pin used by analogin.
++ * @param obj The analogin object to initialize
++ * @param config pointer to structure which holds analogin configuration
++ */
++void analogin_configure(analogin_t *obj, const analogin_config_t *config)
++{
++    MBED_ASSERT(obj);
++
++    /* Get associated channel from the adc object. */
++    uint32_t channel = obj->channel;
++    MBED_ASSERT(channel != (uint32_t) NC);
++
++    /* Account for an off-by-one in Channel definition and Input definition. */
++    nrf_saadc_input_t input = channel + 1;
++
++    /* Configure channel and pin */
++    nrf_saadc_channel_config_t channel_config = {
++    .resistor_p = config->resistor_p,
++    .resistor_n = config->resistor_n,
++    .gain       = config->gain,
++    .reference  = config->reference,
++    .acq_time   = config->acq_time,
++    .mode       = config->mode,
++    .burst      = config->burst,
++    .pin_p      = input,
++    .pin_n      = config->pin_n
++    };
++
++    ret_code_t result = nrfx_saadc_channel_init(channel, &channel_config);
++    MBED_ASSERT(result == NRFX_SUCCESS);
++}
++
+ /** Read the input voltage, represented as a float in the range [0.0, 1.0]
+  *
+  * @param obj The analogin object
+diff --git a/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/objects.h b/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/objects.h
+index d048efe1d7..68395f9419 100644
+--- a/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/objects.h
++++ b/targets/TARGET_NORDIC/TARGET_NRF5x/TARGET_NRF52/objects.h
+@@ -46,6 +46,8 @@
+ #include "nrfx_spi.h"
+ #include "nrf_twi.h"
+ 
++#include "nrf_saadc.h"
++
+ #include "nrf_pwm.h"
+ 
+ #ifdef __cplusplus
+@@ -134,6 +136,18 @@ struct analogin_s {
+     uint8_t channel;
+ };
+ 
++struct analogin_config_s {
++    nrf_saadc_resistor_t  resistor_p;
++    nrf_saadc_resistor_t  resistor_n;
++    nrf_saadc_gain_t      gain;
++    nrf_saadc_reference_t reference;
++    nrf_saadc_acqtime_t   acq_time;
++    nrf_saadc_mode_t      mode;
++    nrf_saadc_burst_t     burst;
++    nrf_saadc_input_t     pin_p;
++    nrf_saadc_input_t     pin_n;
++};
++
+ struct gpio_irq_s {
+     uint32_t ch;
+ };
+diff --git a/tools/profiles/develop.json b/tools/profiles/develop.json
+index 7dd8a96d17..6cfbb99c6d 100644
+--- a/tools/profiles/develop.json
++++ b/tools/profiles/develop.json
+@@ -5,7 +5,7 @@
+                    "-fmessage-length=0", "-fno-exceptions",
+                    "-ffunction-sections", "-fdata-sections", "-funsigned-char",
+                    "-MMD", "-fno-delete-null-pointer-checks",
+-                   "-fomit-frame-pointer", "-Os", "-g", "-DMBED_TRAP_ERRORS_ENABLED=1"],
++                   "-fomit-frame-pointer", "-Os", "-g1", "-DMBED_TRAP_ERRORS_ENABLED=1"],
+         "asm": ["-x", "assembler-with-cpp"],
+         "c": ["-std=gnu11"],
+         "cxx": ["-std=gnu++14", "-fno-rtti", "-Wvla"],
+diff --git a/tools/profiles/release.json b/tools/profiles/release.json
+index 2aab24f6c8..be5387dbb1 100644
+--- a/tools/profiles/release.json
++++ b/tools/profiles/release.json
+@@ -5,7 +5,7 @@
+                    "-fmessage-length=0", "-fno-exceptions",
+                    "-ffunction-sections", "-fdata-sections", "-funsigned-char",
+                    "-MMD", "-fno-delete-null-pointer-checks",
+-                   "-fomit-frame-pointer", "-Os", "-DNDEBUG", "-g"],
++                   "-fomit-frame-pointer", "-Os", "-DNDEBUG", "-g1"],
+         "asm": ["-x", "assembler-with-cpp"],
+         "c": ["-std=gnu11"],
+         "cxx": ["-std=gnu++14", "-fno-rtti", "-Wvla"],
+diff --git a/tools/resources/__init__.py b/tools/resources/__init__.py
+index 45339c1c30..998bdbffdc 100644
+--- a/tools/resources/__init__.py
++++ b/tools/resources/__init__.py
+@@ -71,6 +71,12 @@ LEGACY_IGNORE_DIRS = set([
+     # Tests, here for simplicity
+     'TESTS',
+     'TEST_APPS',
++
++    # Vendor souce files
++    'vendor',
++    'BUILD',
++    'features/cryptocell/FEATURE_CRYPTOCELL310/TARGET_MCU_NRF52840/TOOLCHAIN_GCC_ARM',
++    'features/cryptocell/FEATURE_CRYPTOCELL310/binaries/TOOLCHAIN_GCC_ARM',
+ ])
+ LEGACY_TOOLCHAIN_NAMES = {
+     'ARM_STD':'ARM',
+diff --git a/tools/toolchains/gcc.py b/tools/toolchains/gcc.py
+index 23b5e55586..41e997be91 100644
+--- a/tools/toolchains/gcc.py
++++ b/tools/toolchains/gcc.py
+@@ -98,7 +98,7 @@ class GCC(mbedToolchain):
+         # FPU handling, M7 possibly to have double FPU
+         if core == "Cortex-M4F":
+             self.cpu.append("-mfpu=fpv4-sp-d16")
+-            self.cpu.append("-mfloat-abi=softfp")
++            self.cpu.append("-mfloat-abi=hard")
+         elif core == "Cortex-M7F" or core.startswith("Cortex-M33F"):
+             self.cpu.append("-mfpu=fpv5-sp-d16")
+             self.cpu.append("-mfloat-abi=softfp")
+-- 
+2.24.3 (Apple Git-128)
+

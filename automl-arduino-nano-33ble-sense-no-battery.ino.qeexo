@@ -1,0 +1,116 @@
+/*
+  Qeexo AutoML Demo
+
+  This example creates a Qeexo AutoML predict demo with two threads that shows how
+  to use static library in user application that runs on Arduino Nano 33 BLE
+
+
+  This example code is in the public domain.
+*/
+#include <ArduinoBLE.h>
+#include "QxAutoMLInf.h"
+#include "utility/ATT.h"
+
+const int ledPin = LED_BUILTIN; // set ledPin to on-board LED
+
+uint16_t          LSM6DSMFifoCount      = 0;
+uint16_t          QxMlLatency           = 0;
+uint32_t          QxMlUpdateTime        = 0;
+uint8_t           QxClassificationResult= 0;
+
+QxAutoMLInf  QxAutoMLInf(NULL, NULL);  
+
+
+typedef enum {
+  StatusIdle,
+  StatusOngoing,
+  StatusFinished
+} ConnectStatus;
+  
+#define BLE_CONNECT_WAIT_COUNT 25 
+
+void wait_connected()
+{
+    ConnectStatus connected = StatusIdle;
+    int count =0;
+
+    QxBTHal_Initialize();
+
+    while(!Serial){
+        // poll for BLE events
+
+        QxOS_DebugPrint("usb not connected, processing BLE.");
+
+        BLE.poll();
+
+        if (ATT.connected()) {
+            if (StatusIdle == connected) {
+                connected = StatusOngoing;
+            } 
+        }
+
+        if (StatusIdle == connected) {
+            delay(100);
+            count = 0;
+        } else if (StatusOngoing == connected) {
+            delay(100);
+            Serial.println(count++);
+            if (BLE_CONNECT_WAIT_COUNT == count) {
+                connected = StatusFinished;
+                BLE.stopAdvertise();
+                QxOS_DebugPrint("BT connected, stopAdvertise.");
+                break;
+            }
+        }
+    }
+
+    if (StatusFinished == connected) {
+        QxOS_DebugPrint("connected: %d", connected);
+    }
+}
+
+void setup() {
+
+  /* use the LED as an output to show the prediction result*/
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+
+  /* Wait untill the USB debug port is opened */
+
+  wait_connected();
+  
+  osThreadSetPriority(osThreadGetId(),osPriorityRealtime7);
+
+  /* Call this function to init all necessary preparations for clasification  */
+  QxAutoMLInf.InitEngine();
+}
+ 
+void loop() {
+
+    /* Get classification calling interval(ms) from library */
+    int interval = QxAutoMLInf.GetInterval();
+
+    /* Get current tick in ms */
+    uint32_t tick = QxOS_GetTick();
+
+    /* Call classify periodically */
+    QxClassificationResult = (uint8_t)QxAutoMLInf.Classify();
+    
+    QxMlLatency = (uint16_t)QxOS_GetTick() - tick;
+    QxOS_DebugPrint("Result: %d, lantency: %d, interval: %d",
+        QxClassificationResult, QxMlLatency, QxAutoMLInf.GetInterval());
+    if (QxClassificationResult) {
+        QxOS_DebugPrint("set led off");
+        QxOS_ClassifyBTPrint("1");
+        digitalWrite(ledPin, LOW);
+    } else {
+        QxOS_DebugPrint("set led on");
+        digitalWrite(ledPin, HIGH);
+        QxOS_ClassifyBTPrint("2");
+    }
+
+    if(QxMlLatency < interval) {
+        QxOS_Delay(interval - QxMlLatency);
+    }
+}
+
