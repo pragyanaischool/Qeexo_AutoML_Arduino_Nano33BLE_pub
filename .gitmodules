@@ -1,0 +1,3 @@
+[submodule "hal"]
+	path = hal
+	url = git@github.com:qeexo/AutoML_ArduinoNano33BLE_public.git
