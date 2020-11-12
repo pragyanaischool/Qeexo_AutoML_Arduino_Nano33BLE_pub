@@ -36,14 +36,20 @@ then
     STATIC_LIB_PATH=$2
     if [ "$STATIC_LIB_PATH" = "" ]
     then
-        STATIC_LIB_PATH={compiler.demo_root}/libs/libQxClassifyEngine.a
+        STATIC_LIB_PATH={compiler.demo_root}/libraries
+        STATIC_LIB_NAME=libQxClassifyEngine.a
+    else
+        STATIC_LIB_PATH=${2%/*}
+        echo "STATIC_LIB_PATH $STATIC_LIB_PATH"
+        STATIC_LIB_NAME=${2##*/}
+        echo "STATIC_LIB_NAME $STATIC_LIB_NAME"
     fi
 	arduino-cli compile --fqbn  $BOARD --verbose --libraries ./libraries $COMPILE_PATH --build-path $COMPILE_PATH/output  \
     --build-properties "compiler.demo_root=$COMPILE_PATH"\
     --build-properties "build.extra_flags=-mfloat-abi=soft -DQXO_ARDUINO -DUSE_FIXEDPOINT -mthumb -mcpu=cortex-m0plus \
     				-DARM_MATH_CM0PLUS '-I$COMPILE_PATH/inc' \
     			    --specs=nano.specs --specs=nosys.specs -DQXO_BUILD_CLASSIFY -DCRYSTALLESS -D__SAMD21G18A__ {build.usb_flags}"\
-    --build-properties "compiler.arm.cmsis.ldflags=-L./libraries -larm_cortexM0l_math  -lQxClassifyEngine -lQxSensorHal"
+    --build-properties "compiler.arm.cmsis.ldflags=-L./libraries -larm_cortexM0l_math  '-L$STATIC_LIB_PATH' '-l:$STATIC_LIB_NAME' -lQxSensorHal"
     
 	pid=$! # Process Id of the previous running command
 	while kill -0 $pid 2>/dev/null
