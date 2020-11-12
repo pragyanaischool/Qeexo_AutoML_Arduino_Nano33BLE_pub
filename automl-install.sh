@@ -13,13 +13,14 @@ if [ $SYSTEM = "Linux" ] ; then
 echo "Intalling on Linux"
 elif [ $SYSTEM = "Darwin" ] ; then
 echo "Intalling on MAC"
+brew uninstall arduino-cli
 brew install arduino-cli
 elif [ $SYSTEM = "MINGW64" ] || [ $SYSTEM = "MINGW32" ] ; then
 echo "Intalling on Windows"
 export BINDIR=$HOME/bin
 ARDUINO_CLI_FILEPATH=$BINDIR/arduino-cli.exe
 mkdir -p $BINDIR
-./install.sh
+./tools/install.sh
 else
 echo "Error Unknow system"
 exit

@@ -79,7 +79,11 @@ then
 
 elif [ "$COMMAND" = "--debuglog" ] || [ "$COMMAND" = "-d" ];
 then
+if [ $SYSTEM = "Darwin" ] ; then
     cat $(arduino-cli board list | grep Arduino | cut -d ' ' -f1)
+else
+    $WINPTY python -u tools/debuglog.py -p $(arduino-cli board list | grep Arduino | cut -d ' ' -f1)
+fi
 elif [ "$COMMAND" = "--help" ] || [ "$COMMAND" = "-h" ] || [ "$COMMAND" = "" ];
 then
 	echo 'useage: arduino-build.sh [-h] [-b <STATIC_LIB_PATH>] [-f] [-m] [-d]
