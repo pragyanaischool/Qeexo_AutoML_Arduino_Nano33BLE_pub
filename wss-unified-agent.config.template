@@ -13,7 +13,7 @@ apiKey=${WHITESOURCE_API_KEY}
 
 #projectName=
 projectVersion=
-projectToken=0b6e7d7c142043d0887d3e5d73cb1412f9680abc732d444094029af5a2bf4002
+projectToken=f94b5370376e4c99b2dbdef841a2628dc0054d963bee415a96f46277acf18d6a
 #projectTag= key:value
 
 #productName=
