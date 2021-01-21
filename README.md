@@ -93,9 +93,11 @@ We have provided 4 sensors in this sample file: *accelerometer, gyroscope, magne
 
 ### B. Edit the Arduino .ino file
 
-Use the Arduino IDE or another editor of your choice to open `automl-arduino-nano-33ble-sense.ino` and code your custom application. 
+You have two Sketch files to choose from:
+* If you plan to use the Qeexo-branded battery box, use the Arduino IDE or another editor of your choice to open `automl-arduino-nano-33ble-sense-battery.ino.qeexo` to code your custom application. Be sure to save it with `.ino` extension.
+* If you do not plan to use the Qeexo-branded battery box or unsure what the battery box is, use the Arduino IDE or another editor of your choice to open `automl-arduino-nano-33ble-sense-no-battery.ino.qeexo` to code your custom application. Be sure to save it with `.ino` extension.
 
-The existing `.ino` fille turns the on-board amber LED ON/OFF depending on the classification results. 
+The supplied Sketch file turns the on-board amber LED ON/OFF depending on the classification results. 
 `Class 0` will turn the LED OFF; any other class will turn the LED ON. This should be consistent with what you have observed in Step 3 above. 
 
 Note that the classes are currently mapped alphabetically, from `0` to `n-1`, where n is the number of defined classes. For example, if you labled your classes `RUNNING`, `JUMPING`, and `IDLE`, their respective classes will be `2`, `1`, and `0`. In the future we will print this mapping for your convenience.
