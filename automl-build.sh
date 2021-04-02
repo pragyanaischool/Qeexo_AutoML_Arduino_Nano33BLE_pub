@@ -121,10 +121,10 @@ fi
      ./libs/mbed-core-ARDUINO_NANO33BLE.a
 elif [ "$COMMAND" = "--help" ] || [ "$COMMAND" = "-h" ] || [ "$COMMAND" = "" ];
 then
-	echo 'useage: arduino-build.sh [-h] [-b <STATIC_LIB_PATH>] [-f] [-m] [-d]
+	echo 'useage: automl-build.sh [-h] [-b <STATIC_LIB_PATH>] [-f] [-m] [-d]
      for example:
-         arduino-build.sh -b   //build arduino sketch demo using default static library filepath
-         arduino-build.sh -b  ~/nano-xgb-1.0-static.a  //build arduino sketch demo using gived static library filepath
+         automl-build.sh -b   //build arduino sketch demo using default static library filepath
+         automl-build.sh -b  ~/nano-xgb-1.0-static.a  //build arduino sketch demo using gived static library filepath
      -h, --help           Show this help message and exit
      -b, --build          Build Arduino Nano 33 BLE binary
         <STATIC_LIB_PATH>  the static library filepath to link, the default filepath is: ./libs/libQxClassifyEngine.a
